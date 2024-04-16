@@ -11,7 +11,7 @@ title: "data filtering"
 output: html_document
 date: '2024-04-08'
 ---
-```{r}
+
 # To save the entire workspace:
 save.image(file = "my_workspace.RData")
 load("my_workspace.RData")
@@ -19,9 +19,7 @@ load("my_workspace.RData")
 #clear env:
 # rm(list = ls())
 
-```
 
-```{r}
 library(SeuratObject)
 library(SeuratDisk)
 library(Seurat)
@@ -29,9 +27,7 @@ library(cowplot)
 library(dplyr)
 library(ggplot2)
 
-```
 
-```{r}
 #loom_data <- SeuratDisk::Connect(filename = "/data/gpfs/projects/punim2183/data_processed/l5_All.loom", mode = 'r')
 #mouse_cortex_data <- as.Seurat(loom_data)
 #saveRDS(mouse_cortex_data, file = '/data/gpfs/projects/punim2183/data_processed/mouse_cortex_data.rds')
@@ -43,9 +39,10 @@ mouse_cortex_data <- NormalizeData(mouse_cortex_data) %>% FindVariableFeatures()
 mouse_cortex_data <- RunUMAP(mouse_cortex_data, reduction = 'pca', dims = 1:25, assay = 'RNA', 
                              reduction.name = "rna_umap", reduction.key = "RNA_umap_")
 
-```
 
-```{r}
+
+
+
 # keep samples with a certain number of Astrocytes, Neurons and Oligos as well
 min_astrocyte_count <- 200 
 min_neuron_count <- 200  # define the minimum for Neurons
