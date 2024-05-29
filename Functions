@@ -1,40 +1,73 @@
 
 
-### Filter samples by minimum number of cells
-### (able to select different count for each cell type)
-### output a dataframe of the sample ID, cell type, and count 
+# Filtering based on minimum cell count
 
+## Function to calculate overall proportions of each cell type in the entire dataset
 
-filter_cells_by_min_count <- function(data, min_astrocyte_count=200, min_neuron_count=200, min_oligo_count=200) {
-  # Summarize cell counts by SampleID and Class
-  cell_counts <- data@meta.data %>%
-    dplyr::group_by(SampleID, Class) %>%
-    dplyr::summarise(CellCount = n(), .groups = 'drop') %>%
-    as.data.frame()
+calculate_overall_proportions <- function(data) {
+  filtered_data <- data@meta.data %>%
+    filter(Class %in% c("Astrocytes", "Neurons", "Oligos"))
   
-  # Define cell-type-specific minimum counts
-  min_counts <- list(Astrocytes = min_astrocyte_count, Neurons = min_neuron_count, Oligos = min_oligo_count)
+  total_cell_count <- filtered_data %>%
+    summarise(TotalCellCount = n()) %>%
+    pull(TotalCellCount)
+  
+  cell_type_counts <- filtered_data %>%   # Calculate cell counts for each cell type
+    group_by(Class) %>%
+    summarise(CellCount = n(), .groups = 'drop')
+  
+  cell_type_counts <- cell_type_counts %>%   # Calculate proportions for each cell type
+    mutate(Proportion = CellCount / total_cell_count)
+  
+  return(cell_type_counts)
+}
+
+## Function to get the proportion for a specific cell type
+get_proportion <- function(proportions_df, cell_type) {
+  proportion <- proportions_df %>%
+    filter(Class == cell_type) %>%
+    pull(Proportion)
+  
+  return(proportion)
+}
+
+
+## Function to filter cells by minimum count according to overall proportions
+filter_samples_by_min_count <- function(data, min_total_count) {
+  
+  overall_proportions <- calculate_overall_proportions(data)
+  
+  # Scale minimum counts for each cell type based on overall proportions
+  min_astrocyte_count <- min_total_count * get_proportion(overall_proportions, "Astrocytes")
+  min_neuron_count <- min_total_count * get_proportion(overall_proportions, "Neurons")
+  min_oligo_count <- min_total_count * get_proportion(overall_proportions, "Oligos")
   
   # Initialize a list to store SampleIDs that meet the criteria for each cell type
   valid_sample_ids <- list()
   
   # Check each cell type
-  for (cell_type in names(min_counts)) {
-    ids <- cell_counts %>%
-      dplyr::filter(Class == cell_type & CellCount >= min_counts[[cell_type]]) %>%
-      dplyr::select(SampleID) %>%
-      dplyr::distinct() %>%
+  for (cell_type in c("Astrocytes", "Neurons", "Oligos")) {
+    min_count <- switch(cell_type,
+                        "Astrocytes" = min_astrocyte_count,
+                        "Neurons" = min_neuron_count,
+                        "Oligos" = min_oligo_count)
+    
+    ids <- data@meta.data %>%
+      filter(Class == cell_type) %>%
+      group_by(SampleID) %>%
+      summarise(CellCount = n(), .groups = 'drop') %>%
+      filter(CellCount >= min_count) %>%
       pull(SampleID)
     
     if (length(ids) == 0) {
-      cat(sprintf("No samples have the defined minimum count of %d for %s.\n", min_counts[[cell_type]], cell_type))
+      cat(sprintf("No samples have the defined minimum count for %s.\n", cell_type))
     } else {
       valid_sample_ids[[cell_type]] <- ids
     }
   }
   
   # Check if there are any SampleIDs that meet the criteria for all specified cell types
-  if (length(valid_sample_ids) < length(min_counts)) {
+  if (length(valid_sample_ids) < 3) {
     cat("Some cell types did not meet the minimum cell count criteria.\n")
     return(NULL)
   }
@@ -48,8 +81,8 @@ filter_cells_by_min_count <- function(data, min_astrocyte_count=200, min_neuron_
     return(NULL)
   }
   
-  # Subset the Seurat object to include only cells from the samples that meet the criteria
-  seurat_subset <- subset(data, subset = SampleID %in% samples_to_keep)
+  # Subset the Seurat object to include only samples that meet the criteria
+  seurat_subset <- subset(data, subset = SampleID %in% samples_to_keep & Class %in% c("Astrocytes", "Neurons", "Oligos"))
   
   # Verify if subset is empty
   if (seurat_subset@meta.data %>% nrow() == 0) {
@@ -65,113 +98,48 @@ filter_cells_by_min_count <- function(data, min_astrocyte_count=200, min_neuron_
   target_counts_df <- as.data.frame(target_cell_counts_by_sample)
   names(target_counts_df) <- c("Sample", "CellType", "Count")
   target_counts_df <- target_counts_df %>%
-    dplyr::filter(CellType %in% c("Astrocytes", "Oligos", "Neurons"))
+    filter(CellType %in% c("Astrocytes", "Oligos", "Neurons"))
   
   return(target_counts_df)
 }
 
 
+## function to plot the kept samples vs the cell count of each type
 
-### Filter samples by minimum number of cell
-### (same count threshold for all cell types)  
+plot_cell_type_counts <- function(counts_df) {
+  ggplot(counts_df, aes(x = Sample, y = Count, fill = CellType)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Cell Type Counts by Sample",
+         x = "Sample",
+         y = "Cell Count",
+         fill = "Cell Type") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+}
 
-filter_cells_by_uniform_min_count <- function(data, min_cell_count=200) {
-  # Summarize cell counts by SampleID and Class
-  cell_counts <- data@meta.data %>%
-    dplyr::group_by(SampleID, Class) %>%
-    dplyr::summarise(CellCount = n(), .groups = 'drop') %>%
-    as.data.frame()
-  
-  # Check each cell type and gather valid SampleIDs
-  cell_types <- c("Astrocytes", "Neurons", "Oligos")
-  valid_sample_ids <- lapply(cell_types, function(cell_type) {
-    ids <- cell_counts %>%
-      dplyr::filter(Class == cell_type & CellCount >= min_cell_count) %>%
-      dplyr::select(SampleID) %>%
-      dplyr::distinct() %>%
-      pull(SampleID)
+
+subset_seurat_by_filtered_samples <- function(seurat_object, samples_to_keep) {
+  if (length(samples_to_keep) > 0) {
+    # Flatten the list of samples to keep
+    flat_sample_ids <- unlist(lapply(samples_to_keep, names))
+    flat_sample_ids <- unique(flat_sample_ids)
     
-    if (length(ids) == 0) {
-      cat(sprintf("No samples have the defined minimum count of %d for %s.\n", min_cell_count, cell_type))
-    }
-    ids
-  })
-  
-  # Reduce to find common SampleIDs that meet criteria for all cell types
-  valid_sample_ids <- Reduce(intersect, valid_sample_ids)
-  
-  # If no SampleIDs are valid across all specified cell types
-  if (length(valid_sample_ids) == 0) {
-    cat("No samples meet the minimum cell count across all specified cell types.\n")
+    # Ensure SampleID in seurat_object@meta.data is character type
+    seurat_object@meta.data$SampleID <- as.character(seurat_object@meta.data$SampleID)
+    
+    # Subset the Seurat object to keep only the samples that meet the criteria
+    seurat_filtered <- subset(seurat_object, cells = seurat_object@meta.data$SampleID %in% flat_sample_ids)
+    
+    return(seurat_filtered)
+  } else {
+    print("No samples meet the criteria for subsetting.")
     return(NULL)
   }
-  
-  # Subset the Seurat object to include only cells from the samples that meet the criteria
-  seurat_subset <- subset(data, subset = SampleID %in% valid_sample_ids)
-  
-  # Verify if subset is empty
-  if (seurat_subset@meta.data %>% nrow() == 0) {
-    cat("The resulting subset of the data has no cells. Check the filtering criteria.\n")
-    return(NULL)
-  }
-  
-  # Cell Type per sample
-  target_cell_counts_by_sample <- table(seurat_subset@meta.data$SampleID, seurat_subset@meta.data$Class)
-  print(target_cell_counts_by_sample)
-  
-  # Convert the table to a data frame for plotting
-  target_counts_df <- as.data.frame(target_cell_counts_by_sample)
-  names(target_counts_df) <- c("Sample", "CellType", "Count")
-  target_counts_df <- target_counts_df %>%
-    dplyr::filter(CellType %in% cell_types)
-  
-  # Calculate the total number of unique samples
-  total_samples <- length(unique(target_counts_df$Sample))
-  cat("Total unique samples meeting the criteria:", total_samples, "\n")
-  
-  # Optionally, add the total number of samples to the dataframe
-  target_counts_df$total_samples <- total_samples
-  
-  return(list(data = target_counts_df, total_samples = total_samples))
 }
 
 
 
-
-
-### percentage of cells with threshold of gene expression
-
-filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
-  # Initialize an empty vector to store the IDs of samples that meet the criteria
-  samples_to_keep <- c()
-  
-  # Extract unique sample IDs from the Seurat object
-  sample_ids <- unique(seurat_object@meta.data$SampleID)
-  
-  # Loop over each sample ID
-  for (sample_id in sample_ids) {
-    # Subset the Seurat object for cells that match the current sample ID and are one of the cell types of interest
-    subset_cells <- subset(seurat_object, subset = SampleID == sample_id & Class %in% cell_types_of_interest)
-    
-    # Fetch the gene expression data for the subset
-    expression_data <- FetchData(subset_cells, vars = gene)
-    
-    # Calculate the proportion of cells where the gene's expression is above the threshold
-    proportion_above_threshold <- sum(expression_data[, gene] > threshold, na.rm = TRUE) / nrow(expression_data) * 100
-    
-    # Check if the proportion of cells above the threshold is greater than or equal to the percentage threshold
-    if (proportion_above_threshold >= percentage_threshold) {
-      # If the condition is met, add the sample ID to the list
-      samples_to_keep <- c(samples_to_keep, sample_id)
-    }
-  }
-  
-  # Return the vector of sample IDs that meet the criteria
-  return(samples_to_keep)
-}
-
-
-
+## Violin plot with a list of samples to keep
 
 plot_gene_expression <- function(seurat_object, samples_to_keep, gene, cell_types_of_interest) {
   if (length(samples_to_keep) > 0) {
@@ -188,3 +156,110 @@ plot_gene_expression <- function(seurat_object, samples_to_keep, gene, cell_type
 }
 
 
+
+
+
+
+# # Filter samples based on gene expression, returns samples
+# 
+# filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
+#   samples_to_keep <- list()
+#   
+#   sample_ids <- unique(seurat_object$SampleID)
+#   
+#   seurat_object$SampleID <- as.character(seurat_object$SampleID)
+#   
+#   for (sample_id in sample_ids) {
+#     results_per_cell_type <- list()
+#     
+#     for (cell_type in cell_types_of_interest) {
+#       subset_cells <- subset(seurat_object, subset = SampleID == sample_id & Class == cell_type)
+#       
+#       expression_data <- FetchData(subset_cells, vars = gene)
+#       
+#       if (nrow(expression_data) > 0) {  # Ensure there are cells to avoid division by zero
+#         proportion_above_threshold <- sum(expression_data[, gene] > threshold, na.rm = TRUE) / nrow(expression_data) * 100
+#         
+#         if (proportion_above_threshold >= percentage_threshold) {
+#           # Store the result with sample ID and cell type
+#           results_per_cell_type[[cell_type]] <- proportion_above_threshold
+#         }
+#       }
+#     }
+#     
+#     # If any cell type meets the criteria, add the sample ID and the results for the cell types to the list
+#     if (length(results_per_cell_type) > 0) {
+#       samples_to_keep[[sample_id]] <- results_per_cell_type
+#     }
+#   }
+#   
+#   # Check if any samples were kept and print a message if none were found
+#   if (length(samples_to_keep) == 0) {
+#     print("No samples met the threshold criteria.")
+#   } else {
+#     # Print some details about what was found
+#     print(paste("Samples meeting criteria:", length(samples_to_keep)))
+#     # Flatten the list for further processing or returning if needed
+#     flat_sample_ids <- unlist(lapply(samples_to_keep, names))
+#     flat_sample_ids <- unique(flat_sample_ids)
+#     print(paste("Unique samples kept:", length(flat_sample_ids)))
+#   }
+#   
+#   # Return the list of samples and their respective cell types that meet the criteria
+#   return(samples_to_keep)
+# }
+
+
+filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
+  summary_list <- list()
+  
+  # Ensure SampleID and Class are characters
+  seurat_object@meta.data$SampleID <- as.character(seurat_object@meta.data$SampleID)
+  seurat_object@meta.data$Class <- as.character(seurat_object@meta.data$Class)
+  
+  # Get unique sample IDs from the metadata
+  sample_ids <- unique(seurat_object@meta.data$SampleID)
+  
+  # Loop over each sample ID
+  for (sample_id in sample_ids) {
+    results_per_cell_type <- list()
+    
+    # Filter metadata for the current sample ID
+    sample_metadata <- seurat_object@meta.data %>% filter(SampleID == sample_id)
+    
+    # Fetch gene expression data for the current sample ID
+    sample_expression_data <- FetchData(seurat_object, cells = rownames(sample_metadata), vars = gene)
+    
+    # Loop over each cell type of interest
+    for (cell_type in cell_types_of_interest) {
+      # Filter metadata for the current cell type
+      cell_type_metadata <- sample_metadata %>% filter(Class == cell_type)
+      
+      # Ensure there are cells to avoid division by zero
+      if (nrow(cell_type_metadata) > 0) {
+        # Fetch gene expression data for the current cell type
+        cell_type_expression_data <- sample_expression_data[rownames(cell_type_metadata), , drop = FALSE]
+        
+        # Calculate the proportion of cells where the gene's expression is above the threshold
+        proportion_above_threshold <- sum(cell_type_expression_data[, gene] > threshold, na.rm = TRUE) / nrow(cell_type_expression_data) * 100
+        
+        # Add the result to the list for the cell type
+        results_per_cell_type[[cell_type]] <- proportion_above_threshold
+      }
+    }
+    
+    # Check if any cell type meets the criteria and add to the summary list
+    for (cell_type in cell_types_of_interest) {
+      if (!is.null(results_per_cell_type[[cell_type]]) && results_per_cell_type[[cell_type]] >= percentage_threshold) {
+        summary_list <- append(summary_list, list(data.frame(SampleID = sample_id, 
+                                                             CellType = cell_type, 
+                                                             ProportionAboveThreshold = results_per_cell_type[[cell_type]])))
+      }
+    }
+  }
+  
+  # Combine the list of data frames into a single data frame
+  summary_df <- do.call(rbind, summary_list)
+  
+  return(summary_df)
+}
