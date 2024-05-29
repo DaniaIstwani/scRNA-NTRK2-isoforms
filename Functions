@@ -1,6 +1,6 @@
 
 
-# Filtering based on minimum cell count
+# Filter samples based on minimum cell count
 
 ## Function to calculate overall proportions of each cell type in the entire dataset
 
@@ -33,6 +33,7 @@ get_proportion <- function(proportions_df, cell_type) {
 
 
 ## Function to filter cells by minimum count according to overall proportions
+
 filter_samples_by_min_count <- function(data, min_total_count) {
   
   overall_proportions <- calculate_overall_proportions(data)
@@ -160,54 +161,9 @@ plot_gene_expression <- function(seurat_object, samples_to_keep, gene, cell_type
 
 
 
-# # Filter samples based on gene expression, returns samples
-# 
-# filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
-#   samples_to_keep <- list()
-#   
-#   sample_ids <- unique(seurat_object$SampleID)
-#   
-#   seurat_object$SampleID <- as.character(seurat_object$SampleID)
-#   
-#   for (sample_id in sample_ids) {
-#     results_per_cell_type <- list()
-#     
-#     for (cell_type in cell_types_of_interest) {
-#       subset_cells <- subset(seurat_object, subset = SampleID == sample_id & Class == cell_type)
-#       
-#       expression_data <- FetchData(subset_cells, vars = gene)
-#       
-#       if (nrow(expression_data) > 0) {  # Ensure there are cells to avoid division by zero
-#         proportion_above_threshold <- sum(expression_data[, gene] > threshold, na.rm = TRUE) / nrow(expression_data) * 100
-#         
-#         if (proportion_above_threshold >= percentage_threshold) {
-#           # Store the result with sample ID and cell type
-#           results_per_cell_type[[cell_type]] <- proportion_above_threshold
-#         }
-#       }
-#     }
-#     
-#     # If any cell type meets the criteria, add the sample ID and the results for the cell types to the list
-#     if (length(results_per_cell_type) > 0) {
-#       samples_to_keep[[sample_id]] <- results_per_cell_type
-#     }
-#   }
-#   
-#   # Check if any samples were kept and print a message if none were found
-#   if (length(samples_to_keep) == 0) {
-#     print("No samples met the threshold criteria.")
-#   } else {
-#     # Print some details about what was found
-#     print(paste("Samples meeting criteria:", length(samples_to_keep)))
-#     # Flatten the list for further processing or returning if needed
-#     flat_sample_ids <- unlist(lapply(samples_to_keep, names))
-#     flat_sample_ids <- unique(flat_sample_ids)
-#     print(paste("Unique samples kept:", length(flat_sample_ids)))
-#   }
-#   
-#   # Return the list of samples and their respective cell types that meet the criteria
-#   return(samples_to_keep)
-# }
+#  Filter samples based on gene expression, returns samples
+
+
 
 
 filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
