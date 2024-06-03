@@ -12,8 +12,6 @@ library(ggplot2)
 save.image(file = "my_workspace.RData")
 load("my_workspace.RData")
 
-#clear env:
-# rm(list = ls())
 
 
 library(SeuratObject)
@@ -22,6 +20,8 @@ library(Seurat)
 library(cowplot)
 library(dplyr)
 library(ggplot2)
+library(tidyr)
+
 
 
 #loom_data <- SeuratDisk::Connect(filename = "/data/gpfs/projects/punim2183/data_processed/l5_All.loom", mode = 'r')
@@ -38,20 +38,7 @@ mouse_cortex_data <- RunUMAP(mouse_cortex_data, reduction = 'pca', dims = 1:25, 
 
 
 
----
-title: "arranged"
-output: html_document
-date: '2024-05-25'
----
 
-```{r setup, ech=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-```{r}
-source("/data/gpfs/projects/punim2183/data_processed/my_functions.R")
-
-```
 
 Summarizing cell counts for each cell type and calculating the proportion of each cell type for scaling
 
@@ -157,7 +144,6 @@ prop
 ```
 
 ```{r}
-library(dplyr)
 
 # Function to get the proportion for a specific cell type
 get_proportion <- function(proportions_df, cell_type) {
@@ -285,11 +271,6 @@ filter_samples_by_min_count <- function(data, min_total_count) {
   return(target_counts_df)
 }
 
-# Example usage
-# Assuming `mouse_cortex_data` is your Seurat object
-min_total_count <- 1000  # Example total minimum count to scale by proportions
-filtered_data <- filter_samples_by_min_count(mouse_cortex_data, min_total_count)
-
 
 ```
 
@@ -311,22 +292,24 @@ plot_cell_type_counts <- function(counts_df, df_name) {
 
 ```
 
-```{r}
-min_500 <- filter_samples_by_min_count(mouse_cortex_data, 500)
+# getting the samples' IDs with min-count thresholds as dataframes:
+min_500 <- as.data.frame(filter_samples_by_min_count(mouse_cortex_data, 500))
+min_500_IDs <- min_500$Sample
 
-min_750 <- filter_samples_by_min_count(mouse_cortex_data, 750)
+min_750 <- as.data.frame(filter_samples_by_min_count(mouse_cortex_data, 750))
+min_750_IDs <- min_750$Sample
 
-min_1000 <- filter_samples_by_min_count(mouse_cortex_data, 1000)
+min_1000 <- as.data.frame(filter_samples_by_min_count(mouse_cortex_data, 1000))
+min_1000_IDs <- min_1000$Sample
 
-min_1200 <- filter_samples_by_min_count(mouse_cortex_data, 1200)
+
+min_1200 <- as.data.frame(filter_samples_by_min_count(mouse_cortex_data, 1200))
+min_1200_IDs <- min_1200$Sample
+
 
 min_1500 <- filter_samples_by_min_count(mouse_cortex_data, 1500)
 
 
-```
-
-
-```{r}
 p_500 <- plot_cell_type_counts(min_500, "minimum 500")
 p_750 <- plot_cell_type_counts(min_750,"minimum 750")
 p_1000 <- plot_cell_type_counts(min_1000, "minimum 1000")
@@ -336,9 +319,7 @@ p_500
 p_750
 p_1000
 p_1200
-```
 
-```{r plot_chunck, fig.width=15, fig.height=8}
 
 # Add a new column 'Threshold' to each dataframe
 min_500$Threshold <- "500"
@@ -347,14 +328,22 @@ min_1000$Threshold <- "1000"
 min_1200$Threshold <- "1200"
 
 
+
 # Combine the dataframes
-combined_df <- rbind(min_500, min_750, min_1000, min_1200)
-combined_df$Threshold <- factor(combined_df$Threshold)
+combined_df_1<- rbind(min_500, min_750)
+combined_df_1$Threshold <- factor(combined_df_1$Threshold)
+combined_df_1 <- combined_df_1 %>%
+  mutate(Threshold = factor(Threshold, levels = c(500, 750)))
+
+combined_df_2 <- rbind(min_1000, min_1200)
+combined_df_2$Threshold <- factor(combined_df_2$Threshold)
+combined_df_2 <- combined_df_2 %>%
+  mutate(Threshold = factor(Threshold, levels = c(1000, 1200)))
 
 combined_df <- combined_df %>%
   mutate(Threshold = factor(Threshold, levels = c(500, 750, 1000, 1200)))
 
-plot <- ggplot(combined_df, aes(x = Sample, y = Count)) +
+plot_1 <- ggplot(combined_df_1, aes(x = Sample, y = Count)) +
   geom_boxplot(aes(fill = as.factor(Threshold))) +
   facet_wrap(~ Threshold, scales = "free_y") +
   labs(title = "Cell Counts by Threshold Across Samples",
@@ -362,190 +351,97 @@ plot <- ggplot(combined_df, aes(x = Sample, y = Count)) +
        y = "Cell Count",
        fill = "Threshold") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        theme( axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+         axis.title.x = element_text(size = 18),
+         axis.text.y = element_text(size = 15),  
+         axis.title.y = element_text(size = 18),  
+         plot.title = element_text(size = 18),
+         legend.text = element_text(size = 18),
+         legend.title = element_text(size = 18)
+  )
 
-print(plot)
+
+colors <- c("1000" = "#C77CFF", "1200" = "#6FB07F")
+plot_2 <- ggplot(combined_df_2, aes(x = Sample, y = Count)) +
+  geom_boxplot(aes(fill = as.factor(Threshold))) +
+  facet_wrap(~ Threshold, scales = "free_y") +
+  labs(title = "Cell Counts by Threshold Across Samples",
+       x = "Sample",
+       y = "Cell Count",
+       fill = "Threshold") +
+    scale_fill_manual(values = colors) + 
+  theme_minimal() +
+    theme_minimal() +
+        theme( axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+         axis.title.x = element_text(size = 18),
+         axis.text.y = element_text(size = 15),  
+         axis.title.y = element_text(size = 18),  
+         plot.title = element_text(size = 18),
+         legend.text = element_text(size = 18),
+         legend.title = element_text(size = 18)
+  )
+
+print(plot_1)
+print(plot_2)
+```
+```{r, subsetting Seurat to min count filter}
+
+subset_500 <- subset_seurat_by_filtered_samples(mouse_cortex_data, min_500_IDs)
+subset_750 <- subset_seurat_by_filtered_samples(mouse_cortex_data, min_750_IDs)
+subset_1000 <- subset_seurat_by_filtered_samples(mouse_cortex_data, min_1000_IDs)
+subset_1200 <- subset_seurat_by_filtered_samples(mouse_cortex_data, min_1200_IDs)
+
 ```
 
+# the gene expression level filter:
 
-```{r}
 cell_types_of_interest <- c("Neurons", "Astrocytes", "Oligos")
-by_gene_1_50 <- filter_samples_by_gene_expression(mouse_cortex_data, "Ntrk2", 1.0, 50, cell_types_of_interest)
-by_gene_2_50 <- filter_samples_by_gene_expression(mouse_cortex_data, "Ntrk2", 2.0, 50, cell_types_of_interest)
-by_gene_1_80 <- filter_samples_by_gene_expression(mouse_cortex_data, "Ntrk2", 1.0, 80, cell_types_of_interest)
-by_gene_2_80 <- filter_samples_by_gene_expression(mouse_cortex_data, "Ntrk2", 2.0, 80, cell_types_of_interest)
-
-by_gene_1_50
-by_gene_2_50
-by_gene_1_50
-by_gene_1_80
-# Print all unique combinations of SampleID and Class
-unique_combinations <- unique(mouse_cortex_data@meta.data %>% dplyr::select(SampleID, Class))
-#print(unique_combinations)
-
-```
-
-```{r, fig.width=15, fig.height=8}
-# Calculate intersections for different conditions
-intersected_samples_500a <- intersect(min_500$Sample, by_gene_1_50$SampleID)
-intersected_samples_500b <- intersect(min_500$Sample, by_gene_2_50$SampleID)
-intersected_samples_500c <- intersect(min_500$Sample, by_gene_1_80$SampleID)
-intersected_samples_500d <- intersect(min_500$Sample, by_gene_2_80$SampleID)
-
-intersected_samples_750a <- intersect(min_750$Sample, by_gene_1_50$SampleID)
-intersected_samples_750b <- intersect(min_750$Sample, by_gene_2_50$SampleID)
-intersected_samples_750c <- intersect(min_750$Sample, by_gene_1_80$SampleID)
-intersected_samples_750d <- intersect(min_750$Sample, by_gene_2_80$SampleID)
-
-intersected_samples_1000a <- intersect(min_1000$Sample, by_gene_1_50$SampleID)
-intersected_samples_1000b <- intersect(min_1000$Sample, by_gene_2_50$SampleID)
-intersected_samples_1000c <- intersect(min_1000$Sample, by_gene_1_80$SampleID)
-intersected_samples_1000d <- intersect(min_1000$Sample, by_gene_2_80$SampleID)
-
-intersected_samples_1200a <- intersect(min_1200$Sample, by_gene_1_50$SampleID)
-intersected_samples_1200b <- intersect(min_1200$Sample, by_gene_2_50$SampleID)
-intersected_samples_1200c <- intersect(min_1200$Sample, by_gene_1_80$SampleID)
-intersected_samples_1200d <- intersect(min_1200$Sample, by_gene_2_80$SampleID)
-
-# Create a data frame for plotting
-plot_data <- data.frame(
-  CellCountThreshold = rep(c("500", "750", "1000", "1200"), each = 4),
-  GeneExpressionCondition = rep(c("expression_thresholds_1.0_50%", "expression_thresholds_2.0_50%", "expression_thresholds_1.0_80%", "expression_thresholds_2.0_80%"), times = 4),
-  SampleCount = c(
-    length(intersected_samples_500a), length(intersected_samples_500b), length(intersected_samples_500c), length(intersected_samples_500d),
-    length(intersected_samples_750a), length(intersected_samples_750b), length(intersected_samples_750c), length(intersected_samples_750d),
-    length(intersected_samples_1000a), length(intersected_samples_1000b), length(intersected_samples_1000c), length(intersected_samples_1000d),
-    length(intersected_samples_1200a), length(intersected_samples_1200b), length(intersected_samples_1200c), length(intersected_samples_1200d)
-  ),
-  SampleIDs = I(list(
-    intersected_samples_500a, intersected_samples_500b, intersected_samples_500c, intersected_samples_500d,
-    intersected_samples_750a, intersected_samples_750b, intersected_samples_750c, intersected_samples_750d,
-    intersected_samples_1000a, intersected_samples_1000b, intersected_samples_1000c, intersected_samples_1000d,
-    intersected_samples_1200a, intersected_samples_1200b, intersected_samples_1200c, intersected_samples_1200d
-  ))
-)
-
-# Ensure the GeneExpressionCondition is a factor with all levels specified
-plot_data$GeneExpressionCondition <- factor(plot_data$GeneExpressionCondition, levels = c("expression_thresholds_1.0_50%", "expression_thresholds_2.0_50%", "expression_thresholds_1.0_80%", "expression_thresholds_2.0_80%"))
-
-# Ensure the CellCountThreshold is a factor with the correct order
-plot_data$CellCountThreshold <- factor(plot_data$CellCountThreshold, levels = c("500", "750", "1000", "1200"))
-print(plot_data)
-
-line_plot <- ggplot(plot_data, aes(x = CellCountThreshold, y = SampleCount, group = GeneExpressionCondition, color = GeneExpressionCondition)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Number of Samples by Intersection Conditions", x = "Cell Count Threshold", y = "Number of Samples") +
-  theme_minimal()
-
-print(line_plot)
-
-line_plot + facet_wrap(~ GeneExpressionCondition)
+by_gene_0.1_50_500 <- filter_samples_by_gene_expression_O(subset_500, "Ntrk2", 0.1, 50, cell_types_of_interest)
+by_gene_1.0_50_500 <- filter_samples_by_gene_expression_O(subset_500, "Ntrk2", 1.0, 50, cell_types_of_interest)
+by_gene_0.1_80_500 <- filter_samples_by_gene_expression_O(subset_500, "Ntrk2", 0.1, 80, cell_types_of_interest)
+by_gene_1.0_80_500 <- filter_samples_by_gene_expression_O(subset_500, "Ntrk2", 1.0, 80, cell_types_of_interest)
 
 
-```
-```{r, include =FALSE}
-plot_non_zero <- ggplot(non_zero_table, aes(x = CellType, y = NonZeroCount, color = Dataset, group = Dataset)) +
-  geom_line() +
-  geom_point() +
-  theme_minimal() +
-  labs(title = "Non-Zero Count of Ntrk2 Expression", x = "Cell Type", y = "Non-Zero Count") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facet_wrap(~ Dataset)
+s_500_a <- subset_seurat_by_filtered_samples(subset_500, by_gene_1_50_500)
+s_500_b <- subset_seurat_by_filtered_samples(subset_500, by_gene_1_80_500)
+s_500_c <- subset_seurat_by_filtered_samples(subset_500, by_gene_2_50_500)
+s_500_d <- subset_seurat_by_filtered_samples(subset_500, by_gene_2_80_500)
 
-# Print the Non-Zero Count line plot with facets
-print(plot_non_zero)
-
-# Plot Percentage as a line plot with facets
-plot_percentage <- ggplot(non_zero_table, aes(x = CellType, y = Percentage, color = Dataset, group = Dataset)) +
-  geom_line() +
-  geom_point() +
-  theme_minimal() +
-  labs(title = "Percentage of Non-Zero Ntrk2 Expression", x = "Cell Type", y = "Percentage") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facet_wrap(~ Dataset)
-
-# Print the Percentage line plot with facets
-print(plot_percentage)
-
-```
+by_gene_0.1_50_750 <- filter_samples_by_gene_expression_O(subset_750, "Ntrk2", 0.1, 50, cell_types_of_interest)
+by_gene_1.0_50_750 <- filter_samples_by_gene_expression_O(subset_750, "Ntrk2", 1.0, 50, cell_types_of_interest)
+by_gene_0.1_80_750 <- filter_samples_by_gene_expression_O(subset_750, "Ntrk2", 0.1, 80, cell_types_of_interest)
+by_gene_1.0_80_750 <- filter_samples_by_gene_expression_O(subset_750, "Ntrk2", 1.0, 80, cell_types_of_interest)
 
 
-```{r}
+s_750_a <- subset_seurat_by_filtered_samples(subset_750, by_gene_1_50_750)
+s_750_b <- subset_seurat_by_filtered_samples(subset_750, by_gene_1_80_750)
+s_750_c <- subset_seurat_by_filtered_samples(subset_750, by_gene_2_50_750)
+s_750_d <- subset_seurat_by_filtered_samples(subset_750, by_gene_2_80_750)
 
-# Store the intersected samples in a list
-intersected_samples_list <- list(
-  intersected_samples_500a, intersected_samples_500b, intersected_samples_500c, intersected_samples_500d,
-  intersected_samples_750a, intersected_samples_750b, intersected_samples_750c, intersected_samples_750d,
-  intersected_samples_1000a, intersected_samples_1000b, intersected_samples_1000c, intersected_samples_1000d,
-  intersected_samples_1200a, intersected_samples_1200b, intersected_samples_1200c, intersected_samples_1200d
-)
+by_gene_0.1_50_1000 <- filter_samples_by_gene_expression_O(subset_1000, "Ntrk2", 0.1, 50, cell_types_of_interest)
+by_gene_1.0_50_1000 <- filter_samples_by_gene_expression_O(subset_1000, "Ntrk2", 1.0, 50, cell_types_of_interest)
+by_gene_0.1_80_1000 <- filter_samples_by_gene_expression_O(subset_1000, "Ntrk2", 0.1, 80, cell_types_of_interest)
+by_gene_1.0_80_1000 <- filter_samples_by_gene_expression_O(subset_1000, "Ntrk2", 1.0, 80, cell_types_of_interest)
 
-# Find the maximum length of the intersected sample lists
-max_length <- max(sapply(intersected_samples_list, length))
+s_1000_a <- subset_seurat_by_filtered_samples(subset_1000, by_gene_1_50_1000)
+s_1000_b <- subset_seurat_by_filtered_samples(subset_1000, by_gene_1_80_1000)
+s_1000_c <- subset_seurat_by_filtered_samples(subset_1000, by_gene_2_50_1000)
+s_1000_d <- subset_seurat_by_filtered_samples(subset_1000, by_gene_2_80_1000)
 
-# Pad each list with NA values to match the maximum length
-padded_samples_list <- lapply(intersected_samples_list, function(x) {
-  length(x) <- max_length
-  return(x)
-})
-
-# Combine the padded lists into a data frame
-combined_intersected <- as.data.frame(do.call(cbind, padded_samples_list))
-
-# Assign column names based on the conditions
-colnames(combined_intersected) <- c(
-  "500_expression_thresholds_1.0_50%", "500_expression_thresholds_2.0_50%", "500_expression_thresholds_1.0_80%", "500_expression_thresholds_2.0_80%",
-  "750_expression_thresholds_1.0_50%", "750_expression_thresholds_2.0_50%", "750_expression_thresholds_1.0_80%", "750_expression_thresholds_2.0_80%",
-  "1000_expression_thresholds_1.0_50%", "1000_expression_thresholds_2.0_50%", "1000_expression_thresholds_1.0_80%", "1000_expression_thresholds_2.0_80%",
-  "1200_expression_thresholds_1.0_50%", "1200_expression_thresholds_2.0_50%", "1200_expression_thresholds_1.0_80%", "1200_expression_thresholds_2.0_80%"
-)
-
-# Print the combined_intersected data frame to check its contents
-print(combined_intersected)
+by_gene_0.1_50_1200 <- filter_samples_by_gene_expression_O(subset_1200, "Ntrk2", 0.1, 50, cell_types_of_interest)
+by_gene_1.0_50_1200 <- filter_samples_by_gene_expression_O(subset_1200, "Ntrk2", 1.0, 50, cell_types_of_interest)
+by_gene_0.1_80_1200 <- filter_samples_by_gene_expression_O(subset_1200, "Ntrk2", 0.1, 80, cell_types_of_interest)
+by_gene_1.0_80_1200 <- filter_samples_by_gene_expression_O(subset_1200, "Ntrk2", 1.0, 80, cell_types_of_interest)
 
 
-```
-
-```{r}
-intersected_samples_list_1 <- list(
-  intersected_samples_750b,intersected_samples_750c, intersected_samples_1000a, intersected_samples_1000b,
-  intersected_samples_1200a, intersected_samples_1200b
-)
-
-# Find the maximum length of the intersected sample lists
-max_length <- max(sapply(intersected_samples_list_1, length))
-
-# Pad each list with NA values to match the maximum length
-padded_samples_list_1 <- lapply(intersected_samples_list_1, function(x) {
-  length(x) <- max_length
-  return(x)
-})
-
-# Combine the padded lists into a data frame
-combined_intersected_1 <- as.data.frame(do.call(cbind, padded_samples_list_1))
-
-# Assign column names based on the conditions
-colnames(combined_intersected_1) <- c("750b_expression_thresholds_2.0_50%",
-  "750_expression_thresholds_1.0_80%", "1000_expression_thresholds_1.0_50%", 
-  "1000_expression_thresholds_2.0_50%", "1200_expression_thresholds_1.0_50%", 
-  "1200_expression_thresholds_2.0_50%"
-)
-
-# Print the combined_intersected data frame to check its contents
-print(combined_intersected_1)
+s_1200_a <- subset_seurat_by_filtered_samples(subset_1200, by_gene_1_50_1200)
+s_1200_b <- subset_seurat_by_filtered_samples(subset_1200, by_gene_1_80_1200)
 
 
-#write.csv(combined_intersected_1, "combined_intersected_1.csv", row.names = FALSE)
 
-#install.packages("writexl")
+----
+#subsetting seurat objects according to the kept samples:
 
-#write_xlsx(combined_intersected_1, "combined_intersected_1.xlsx")
-
-
-```
-
-```{r, Seurat subsetting}
 chosen_samples_11 <- c("10X26_3", "10X26_4", "10X52_2","10X22_3", "10X22_4", "10X24_1", 
                     "10X52_1","10X52_3", "10X52_4", "10X57_2", "10X57_3")
 chosen_samples_3 <- c("10X26_3", "10X26_4", "10X52_2")
@@ -609,6 +505,118 @@ oligo_expression_3 <- FetchData(subset_Oligos_3, vars = "Ntrk2")
 non_zero_O_3 <- sum(oligo_expression_3[["Ntrk2"]] > 0)
 
 ```
+
+
+# calculation the non-zero expression of Ntrk2 in terms of cell count
+# Initialize a data frame to store the results
+non_zero_table <- data.frame(
+  Dataset = character(), 
+  CellType = character(), 
+  NonZeroCount = numeric(), 
+  stringsAsFactors = FALSE
+)
+
+count_non_zero_expressions <- function(dataset, dataset_name, cell_type) {
+  subset_seurat_object <- subset(dataset, subset = Class == cell_type)
+  
+  gene_expression <- FetchData(subset_seurat_object, vars = "Ntrk2")
+  
+  num_non_zero <- sum(gene_expression[["Ntrk2"]] > 0)
+  
+  # Add the result to the table
+  non_zero_table <<- rbind(
+    non_zero_table, 
+    data.frame(
+      Dataset = dataset_name, 
+      CellType = cell_type, 
+      NonZeroCount = num_non_zero, 
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+# Define datasets, names, and cell types
+datasets <- list(
+  mouse_cortex_data = mouse_cortex_data, 
+  eleven_samples_seurat = eleven_samples_seurat, 
+  three_samples_seurat = three_samples_seurat
+)
+
+cell_types_of_interest <- c("Neurons", "Astrocytes", "Oligos")
+
+# Loop through each dataset and cell type to count non-zero expressions
+for (dataset_name in names(datasets)) {
+  dataset <- datasets[[dataset_name]]
+  
+  # Total non-zero expressions for the entire dataset
+  ntrk2_expression <- FetchData(dataset, vars = "Ntrk2")
+  num_non_zero <- sum(ntrk2_expression$Ntrk2 > 0)
+  non_zero_table <- rbind(
+    non_zero_table, 
+    data.frame(
+      Dataset = dataset_name, 
+      CellType = "Total", 
+      NonZeroCount = num_non_zero, 
+      stringsAsFactors = FALSE
+    )
+  )
+  
+  for (cell_type in cell_types_of_interest) {
+    count_non_zero_expressions(dataset, dataset_name, cell_type)
+  }
+}
+
+# Calculate percentage for each cell type within each dataset
+non_zero_table <- non_zero_table %>%
+  group_by(Dataset) %>%
+  mutate(Percentage = (NonZeroCount / NonZeroCount[CellType == "Total"]) * 100)
+
+# Convert Dataset and CellType to factors for better plotting
+non_zero_table$Dataset <- factor(non_zero_table$Dataset, levels = c("mouse_cortex_data", "eleven_samples_seurat", "three_samples_seurat"))
+non_zero_table$CellType <- factor(non_zero_table$CellType, levels = c("Total", "Neurons", "Astrocytes", "Oligos"))
+
+# Print the resulting table
+print(non_zero_table)
+
+# Plot Non-Zero Count as a line plot
+plot_non_zero <- ggplot(non_zero_table, aes(x = CellType, y = NonZeroCount, color = Dataset, group = Dataset)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Cell-Count with Non-Zero Ntrk2 Expression", x = "Cell Type", y = "Non-Zero Count") +
+  theme( axis.text.x = element_text(angle = 45, hjust = 1, size = 18),
+         axis.title.x = element_text(size = 22),
+         axis.text.y = element_text(size = 18),  
+         axis.title.y = element_text(size = 22),  
+         plot.title = element_text(size = 22),
+         legend.text = element_text(size = 22),
+         legend.title = element_text(size = 22)
+  )
+
+# Print the Non-Zero Count line plot
+print(plot_non_zero)
+
+# Plot Percentage as a line plot
+plot_percentage <- ggplot(non_zero_table, aes(x = CellType, y = Percentage, color = Dataset, group = Dataset)) +
+  geom_line() +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(title = "Percentage of Cells with Non-Zero Ntrk2 Expression", x = "Cell Type", y = "Percentage") +
+  theme( axis.text.x = element_text(angle = 45, hjust = 1, size = 18),
+         axis.title.x = element_text(size = 22),
+         axis.text.y = element_text(size = 18),  
+         axis.title.y = element_text(size = 22),  
+         plot.title = element_text(size = 22),
+         legend.text = element_text(size = 22),
+         legend.title = element_text(size = 22)
+  )
+
+# Print the Percentage line plot
+print(plot_percentage)
+
+
+```
+
 
 ```{r}
 ages <- three_samples_seurat@meta.data$Age[]
