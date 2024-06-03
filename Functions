@@ -1,6 +1,6 @@
 
 
-# Filter samples based on minimum cell count
+# Filtering based on minimum cell count
 
 ## Function to calculate overall proportions of each cell type in the entire dataset
 
@@ -33,7 +33,6 @@ get_proportion <- function(proportions_df, cell_type) {
 
 
 ## Function to filter cells by minimum count according to overall proportions
-
 filter_samples_by_min_count <- function(data, min_total_count) {
   
   overall_proportions <- calculate_overall_proportions(data)
@@ -101,7 +100,7 @@ filter_samples_by_min_count <- function(data, min_total_count) {
   target_counts_df <- target_counts_df %>%
     filter(CellType %in% c("Astrocytes", "Oligos", "Neurons"))
   
-  return(target_counts_df)
+  return(samples_to_keep)
 }
 
 
@@ -119,24 +118,22 @@ plot_cell_type_counts <- function(counts_df) {
 }
 
 
+
+# subset seurat based on minimum number of cells filter:
+
 subset_seurat_by_filtered_samples <- function(seurat_object, samples_to_keep) {
   if (length(samples_to_keep) > 0) {
-    # Flatten the list of samples to keep
-    flat_sample_ids <- unlist(lapply(samples_to_keep, names))
-    flat_sample_ids <- unique(flat_sample_ids)
-    
-    # Ensure SampleID in seurat_object@meta.data is character type
-    seurat_object@meta.data$SampleID <- as.character(seurat_object@meta.data$SampleID)
     
     # Subset the Seurat object to keep only the samples that meet the criteria
-    seurat_filtered <- subset(seurat_object, cells = seurat_object@meta.data$SampleID %in% flat_sample_ids)
+    seurat_sub <- subset(seurat_object, subset = SampleID %in% samples_to_keep)
     
-    return(seurat_filtered)
+    return(seurat_sub)
   } else {
-    print("No samples meet the criteria for subsetting.")
+    print("No samples to keep.")
     return(NULL)
   }
 }
+
 
 
 
@@ -158,64 +155,46 @@ plot_gene_expression <- function(seurat_object, samples_to_keep, gene, cell_type
 
 
 
-
-
-
-#  Filter samples based on gene expression, returns samples
-
-
-
-
-filter_samples_by_gene_expression <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
-  summary_list <- list()
+filter_samples_by_gene_expression_O <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
+  samples_to_keep <- list()
+  sample_ids <- unique(seurat_object$SampleID)
+  seurat_object$SampleID <- as.character(seurat_object$SampleID)
   
-  # Ensure SampleID and Class are characters
-  seurat_object@meta.data$SampleID <- as.character(seurat_object@meta.data$SampleID)
-  seurat_object@meta.data$Class <- as.character(seurat_object@meta.data$Class)
-  
-  # Get unique sample IDs from the metadata
-  sample_ids <- unique(seurat_object@meta.data$SampleID)
-  
-  # Loop over each sample ID
   for (sample_id in sample_ids) {
     results_per_cell_type <- list()
     
-    # Filter metadata for the current sample ID
-    sample_metadata <- seurat_object@meta.data %>% filter(SampleID == sample_id)
-    
-    # Fetch gene expression data for the current sample ID
-    sample_expression_data <- FetchData(seurat_object, cells = rownames(sample_metadata), vars = gene)
-    
-    # Loop over each cell type of interest
     for (cell_type in cell_types_of_interest) {
-      # Filter metadata for the current cell type
-      cell_type_metadata <- sample_metadata %>% filter(Class == cell_type)
+      subset_cells <- subset(seurat_object, subset = SampleID == sample_id & Class == cell_type)
+      expression_data <- FetchData(subset_cells, vars = gene)
       
-      # Ensure there are cells to avoid division by zero
-      if (nrow(cell_type_metadata) > 0) {
-        # Fetch gene expression data for the current cell type
-        cell_type_expression_data <- sample_expression_data[rownames(cell_type_metadata), , drop = FALSE]
+      if (nrow(expression_data) > 0) {  # Ensure there are cells to avoid division by zero
+        proportion_above_threshold <- sum(expression_data[, gene] > threshold, na.rm = TRUE) / nrow(expression_data) * 100
         
-        # Calculate the proportion of cells where the gene's expression is above the threshold
-        proportion_above_threshold <- sum(cell_type_expression_data[, gene] > threshold, na.rm = TRUE) / nrow(cell_type_expression_data) * 100
-        
-        # Add the result to the list for the cell type
-        results_per_cell_type[[cell_type]] <- proportion_above_threshold
+        if (proportion_above_threshold >= percentage_threshold) {
+          results_per_cell_type[[cell_type]] <- proportion_above_threshold
+        }
+      } else {
+        message(paste("No cells found for SampleID:", sample_id, "and Class:", cell_type))
       }
     }
     
-    # Check if any cell type meets the criteria and add to the summary list
-    for (cell_type in cell_types_of_interest) {
-      if (!is.null(results_per_cell_type[[cell_type]]) && results_per_cell_type[[cell_type]] >= percentage_threshold) {
-        summary_list <- append(summary_list, list(data.frame(SampleID = sample_id, 
-                                                             CellType = cell_type, 
-                                                             ProportionAboveThreshold = results_per_cell_type[[cell_type]])))
-      }
+    if (length(results_per_cell_type) > 0) {
+      samples_to_keep[[sample_id]] <- results_per_cell_type
     }
   }
   
-  # Combine the list of data frames into a single data frame
-  summary_df <- do.call(rbind, summary_list)
+  if (length(samples_to_keep) == 0) {
+    print("No samples met the threshold criteria.")
+  } else {
+    print(paste("Samples meeting criteria:", length(samples_to_keep)))
+  }
   
-  return(summary_df)
+  return(names(samples_to_keep))
 }
+
+
+
+
+
+
+
