@@ -155,13 +155,15 @@ plot_gene_expression <- function(seurat_object, samples_to_keep, gene, cell_type
 
 
 
-filter_samples_by_gene_expression_O <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
+
+  filter_samples_by_gene_expression_O <- function(seurat_object, gene, threshold, percentage_threshold, cell_types_of_interest) {
   samples_to_keep <- list()
   sample_ids <- unique(seurat_object$SampleID)
   seurat_object$SampleID <- as.character(seurat_object$SampleID)
   
   for (sample_id in sample_ids) {
     results_per_cell_type <- list()
+    all_cell_types_met <- TRUE
     
     for (cell_type in cell_types_of_interest) {
       subset_cells <- subset(seurat_object, subset = SampleID == sample_id & Class == cell_type)
@@ -171,14 +173,22 @@ filter_samples_by_gene_expression_O <- function(seurat_object, gene, threshold, 
         proportion_above_threshold <- sum(expression_data[, gene] > threshold, na.rm = TRUE) / nrow(expression_data) * 100
         
         if (proportion_above_threshold >= percentage_threshold) {
-          results_per_cell_type[[cell_type]] <- proportion_above_threshold
+          results_per_cell_type[[cell_type]] <- list(
+            proportion_above_threshold = proportion_above_threshold,
+            num_cells = nrow(expression_data)
+          )
+        } else {
+          all_cell_types_met <- FALSE
+          break
         }
       } else {
         message(paste("No cells found for SampleID:", sample_id, "and Class:", cell_type))
+        all_cell_types_met <- FALSE
+        break
       }
     }
     
-    if (length(results_per_cell_type) > 0) {
+    if (all_cell_types_met) {
       samples_to_keep[[sample_id]] <- results_per_cell_type
     }
   }
@@ -187,6 +197,15 @@ filter_samples_by_gene_expression_O <- function(seurat_object, gene, threshold, 
     print("No samples met the threshold criteria.")
   } else {
     print(paste("Samples meeting criteria:", length(samples_to_keep)))
+  }
+  
+  for (sample_id in names(samples_to_keep)) {
+    cat(paste("Sample ID:", sample_id, "\n"))
+    for (cell_type in names(samples_to_keep[[sample_id]])) {
+      cat(paste("  Cell Type:", cell_type, 
+                "- Proportion Above Threshold:", samples_to_keep[[sample_id]][[cell_type]]$proportion_above_threshold,
+                "- Number of Cells:", samples_to_keep[[sample_id]][[cell_type]]$num_cells, "\n"))
+    }
   }
   
   return(names(samples_to_keep))
