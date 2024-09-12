@@ -1,0 +1,83 @@
+# code to modify a GTF file to update the input for generating a count matrix in regards of "new genes" of interest
+#modified the gene name to be the transcript name: e.x gene_id”ENSMUST00000109838.8”
+# two isoforms of interest: Ntrk2trunc and Ntrk2FL
+
+**`project** awk '`
+
+`{`
+
+`# Replace gene_name with Ntrk2trunc`
+
+`sub(/gene_name "[^"]+"/, "gene_name \"Ntrk2trunc\"");`
+
+`# Capture the transcript_id value`
+
+`transcript_id = "";`
+
+`if (match($0, /transcript_id "[^"]+"/)) {`
+
+`transcript_id = substr($0, RSTART + 14, RLENGTH - 15);`
+
+`}`
+
+`# Replace gene_id with the captured transcript_id value`
+
+`sub(/gene_id "[^"]+"/, "gene_id \"" transcript_id "\"");`
+
+`# Remove the transcript_id field`
+
+`gsub(/transcript_id "[^"]+";[ ]*/, "");`
+
+`# Print the modified line`
+
+`print`
+
+`}' extracted_exons_trunc.gtf > mod_exons_trunc.gtf`
+
+**`➜  project** awk '`
+
+`{`
+
+`# Replace gene_name with Ntrk2FL`
+
+`sub(/gene_name "[^"]+"/, "gene_name \"Ntrk2FL\"");`
+
+`# Capture the transcript_id value`
+
+`transcript_id = "";`
+
+`if (match($0, /transcript_id "[^"]+"/)) {`
+
+`transcript_id = substr($0, RSTART + 14, RLENGTH - 15);`
+
+`}`
+
+`# Replace gene_id with the captured transcript_id value`
+
+`sub(/gene_id "[^"]+"/, "gene_id \"" transcript_id "\"");`
+
+`# Remove the transcript_id field`
+
+`gsub(/transcript_id "[^"]+";[ ]*/, "");`
+
+`# Print the modified line`
+
+`print`
+
+`}' extracted_exons_FL.gtf > mod_exons_FL.gtf`
+
+
+
+
+**then concatenated to the gtf file:** 
+
+cat mod_exons_trunc.gtf >> gencode.vM10.annotation.gtf
+cat mod_exons_FL.gtf >> gencode.vM10.annotation.gtf
+
+
+**Sort the file then replaced chr# with only the number** 
+
+(grep ^"#" gencode.vM10.annotation.gtf; grep -v ^"#" gencode.vM10.annotation.gtf | sort -k1,1 -k4,4n) > sorted_gtf_exons.gtf
+
+# remove "chr" as the tool DropEst doesn't take a gtf with chr (in chromosoms' naming)
+sed 's/chr\([0-9XYM]*\)/\1/' sorted_gtf_exons.gtf > sorted_gtf_exons_n.gtf 
