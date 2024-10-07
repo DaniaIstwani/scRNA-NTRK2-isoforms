@@ -245,3 +245,34 @@ count_to_seurat <- function(counts_data_path, resolution = 0.1, dims = 1:10) {
 }
 
 
+
+# visualise gene expression between different seurat objects.
+
+compare_gene_expression <- function(gene_of_interest, seurat_obj_list, labels) {
+  expression_data <- data.frame()
+  
+  # Loop through each Seurat object and fetch the gene expression
+  for (i in seq_along(seurat_obj_list)) {
+    seurat_obj <- seurat_obj_list[[i]]
+    gene_expression <- FetchData(seurat_obj, vars = gene_of_interest)
+    
+    # Create a dataframe with expression values and corresponding dataset label
+    temp_df <- data.frame(Expression = gene_expression[[gene_of_interest]],
+                          Dataset = labels[i])
+    
+    # Combine the dataframes
+    expression_data <- rbind(expression_data, temp_df)
+  }
+  
+  # Create a violin plot to compare gene expression across datasets
+  p <- ggplot(expression_data, aes(x = Dataset, y = Expression, fill = Dataset)) +
+    geom_violin(trim = FALSE) +
+    geom_boxplot(width = 0.1) +
+    theme_minimal() +
+    labs(title = paste("Comparison of", gene_of_interest, "Expression"), 
+         y = "Expression Level", x = "Dataset")
+  
+  # Return the plot
+  return(p)
+}
+
